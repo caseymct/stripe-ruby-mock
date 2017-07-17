@@ -76,8 +76,16 @@ module StripeMock
       def create_subscription(route, method_url, params, headers)
         route =~ method_url
 
-        plan_id = params[:plan].to_s
-        plan = assert_existence :plan, plan_id, plans[plan_id]
+        if params[:items]
+          items = params[:items].values
+          # params[:items].each do |_k, item|
+          #   plan_id = item[:plan].to_s
+          #   items << assert_existence(:plan, plan_id, plans[plan_id])
+          # end
+        else
+          plan_id = params[:plan].to_s
+          plan = assert_existence :plan, plan_id, plans[plan_id]
+        end
 
         customer = params[:customer]
         customer_id = customer.is_a?(Stripe::Customer) ? customer[:id] : customer.to_s
@@ -96,10 +104,20 @@ module StripeMock
         end
 
         subscription = Data.mock_subscription({ id: (params[:id] || new_id('su')) })
-        subscription.merge!(custom_subscription_params(plan, customer, params))
+        if params[:items]
+          subscription.merge!(
+            custom_subscription_multiple_plan_params(items, customer, params)
+          )
 
-        # Ensure customer has card to charge if plan has no trial and is not free
-        verify_card_present(customer, plan, subscription, params)
+          items.each do |plan|
+            # Ensure customer has card to charge if plan has no trial and is not free
+            verify_card_present(customer, plan, subscription, params)
+          end
+        else
+          subscription.merge!(custom_subscription_params(plan, customer, params))
+          # Ensure customer has card to charge if plan has no trial and is not free
+          verify_card_present(customer, plan, subscription, params)
+        end
 
         if params[:coupon]
           coupon_id = params[:coupon]
@@ -152,11 +170,21 @@ module StripeMock
           customer[:default_source] = new_card[:id]
         end
 
-        # expand the plan for addition to the customer object
-        plan_name =
-          params[:plan].is_a?(String) ? params[:plan] : subscription[:plan][:id]
+        if params[:items]
+          if !params[:items].empty?
+            items = []
+            params[:items].each do |item|
+              plan_id = item[:plan].to_s
+              items << assert_existence(:plan, plan_id, plans[plan_id])
+            end
+          end
+        else
+          # expand the plan for addition to the customer object
+          plan_name =
+            params[:plan].is_a?(String) ? params[:plan] : subscription[:plan][:id]
 
-        plan = plans[plan_name]
+          plan = plans[plan_name]
+        end
 
         if params[:coupon]
           coupon_id = params[:coupon]
@@ -173,18 +201,28 @@ module StripeMock
             raise Stripe::InvalidRequestError.new("No such coupon: #{coupon_id}", 'coupon', http_status: 400)
           end
         end
-
-        assert_existence :plan, plan_name, plan
-        params[:plan] = plan if params[:plan]
-        verify_card_present(customer, plan, subscription)
-
         if subscription[:cancel_at_period_end]
           subscription[:cancel_at_period_end] = false
           subscription[:canceled_at] = nil
         end
 
         params[:current_period_start] = subscription[:current_period_start]
-        subscription.merge!(custom_subscription_params(plan, customer, params))
+
+        if params[:items]
+          if !params[:items].empty?
+            items.each do |plan|
+              assert_existence :plan, plan[:id], plan
+              # Ensure customer has card to charge if plan has no trial and is not free
+              verify_card_present(customer, plan, subscription, params)
+            end
+            subscription.merge!(custom_subscription_multiple_plan_params(items, customer, params))
+          end
+        else
+          assert_existence :plan, plan_name, plan
+          params[:plan] = plan if params[:plan]
+          verify_card_present(customer, plan, subscription)
+          subscription.merge!(custom_subscription_params(plan, customer, params))
+        end
 
         # delete the old subscription, replace with the new subscription
         customer[:subscriptions][:data].reject! { |sub| sub[:id] == subscription[:id] }

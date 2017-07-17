@@ -284,8 +284,8 @@ module StripeMock
     def self.mock_subscription(params={})
       StripeMock::Util.rmerge({
         :created => 1478204116,
-        :current_period_start => 1308595038,
-        :current_period_end => 1308681468,
+        :current_period_start => Time.now.to_i,
+        :current_period_end => (Time.now + 30.days).to_i,
         :status => "trialing",
         :plan => {
           :interval => "month",
@@ -299,13 +299,34 @@ module StripeMock
         :ended_at => nil,
         :start => 1308595038,
         :object => "subscription",
-        :trial_start => 1308595038,
-        :trial_end => 1308681468,
+        :trial_start => Time.now.to_i,
+        :trial_end => (Time.now + 30.days).to_i,
         :customer => "c_test_customer",
         :quantity => 1,
         :tax_percent => nil,
         :discount => nil,
         :metadata => {}
+      }, params)
+    end
+
+    def self.mock_subscription_item(params={})
+      StripeMock::Util.rmerge({
+        :id => "test_si_default",
+        :object => "subscription_item",
+        :created => 1499808661,
+        :plan => {
+          :id => 'starter-monthly',
+          :object => 'plan',
+          :amount => 24000,
+          :created => 1499351620,
+          :currency => "usd",
+          :interval => "month",
+          :interval_count => 1,
+          :metadata => {},
+          :name => "Starter (Monthly)",
+          :trial_period_days => 30
+        },
+        :quantity => 1
       }, params)
     end
 

@@ -6,6 +6,32 @@ module StripeMock
         customer[:subscriptions][:data].find{|sub| sub[:id] == sub_id }
       end
 
+      def get_subscription_from_subscription_item(item_id)
+        subscriptions.values.find {|sub| sub[:items][:data].map{|item| item[:id]}.include?(item_id) }
+      end
+
+      def add_new_subscription_item(params)
+        plan_id = params.fetch(:plan, nil) || params.fetch(:id, nil)
+        plan = assert_existence :plan, plan_id, plans[plan_id]
+        quantity = params.fetch(:quantity, 1)
+
+        item = Data.mock_subscription_item({ id: new_id('si'), plan: plan, quantity: quantity })
+        subscription_items[item[:id]] = item
+        item
+      end
+
+      def custom_subscription_multiple_plan_params(items, cus, options={})
+        start_time = options[:current_period_start] || Time.now.utc.to_i
+        data = items.map { |d| add_new_subscription_item(d) }
+
+        {
+          items: { data: data },
+          customer: cus[:id],
+          current_period_start: start_time
+        }
+        .merge! options.select {|k,v| k =~ /application_fee_percent|quantity|metadata|tax_percent/}
+      end
+
       def custom_subscription_params(plan, cus, options = {})
         verify_trial_end(options[:trial_end]) if options[:trial_end]
 
